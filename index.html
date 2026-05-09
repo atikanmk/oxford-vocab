@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oxford 3000 Vocab Cards</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-inner">
+      <h1>📚 Oxford 3000</h1>
+      <p class="subtitle">Vocabulary Flashcards</p>
+    </div>
+  </header>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <!-- Search -->
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="ค้นหาคำศัพท์..." />
+    </div>
+
+    <!-- Level Filter -->
+    <div class="filter-group">
+      <span class="filter-label">ระดับ:</span>
+      <button class="level-btn active" data-level="all">ทั้งหมด</button>
+      <button class="level-btn a1" data-level="A1">A1</button>
+      <button class="level-btn a2" data-level="A2">A2</button>
+      <button class="level-btn b1" data-level="B1">B1</button>
+      <button class="level-btn b2" data-level="B2">B2</button>
+    </div>
+
+    <!-- Shuffle & Reset -->
+    <div class="action-group">
+      <button id="shuffleBtn" class="action-btn">🔀 สุ่ม</button>
+      <button id="resetBtn" class="action-btn">↩️ เริ่มใหม่</button>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="progress-section">
+    <div class="progress-info">
+      <span id="currentNum">1</span> / <span id="totalNum">0</span>
+      <span class="progress-label">&nbsp;|&nbsp;เรียนแล้ว: <span id="learnedNum">0</span></span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+  </div>
+
+  <!-- CARD AREA -->
+  <div class="card-area">
+    <button class="nav-btn" id="prevBtn" title="ก่อนหน้า">&#8592;</button>
+
+    <div class="card-wrapper">
+      <div class="card" id="card">
+        <!-- FRONT -->
+        <div class="card-face front">
+          <div class="card-level" id="cardLevel">A1</div>
+          <div class="card-word" id="cardWord">—</div>
+          <div class="card-pos" id="cardPos">—</div>
+          <div class="card-ipa" id="cardIpa">—</div>
+          <div class="card-hint">แตะการ์ดเพื่อดูความหมาย 👆</div>
+          <button class="speak-btn" id="speakBtn" title="ฟังเสียง">🔊</button>
+        </div>
+
+        <!-- BACK -->
+        <div class="card-face back">
+          <div class="card-level" id="cardLevelBack">A1</div>
+          <div class="card-word-sm" id="cardWordBack">—</div>
+          <div class="card-meaning" id="cardMeaning">—</div>
+          <div class="card-ipa-back" id="cardIpaBack">—</div>
+          <div class="know-btns">
+            <button class="know-btn dont-know" id="dontKnowBtn">😅 ยังไม่รู้</button>
+            <button class="know-btn know" id="knowBtn">✅ รู้แล้ว!</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="nav-btn" id="nextBtn" title="ถัดไป">&#8594;</button>
+  </div>
+
+  <!-- KEYBOARD HINT -->
+  <div class="key-hint">
+    ⌨️ <kbd>Space</kbd> พลิกการ์ด &nbsp; <kbd>←</kbd><kbd>→</kbd> เปลี่ยนการ์ด &nbsp; <kbd>K</kbd> รู้แล้ว &nbsp; <kbd>S</kbd> สุ่ม
+  </div>
+
+  <!-- STATS PANEL -->
+  <div class="stats-panel">
+    <div class="stat-item">
+      <div class="stat-num" id="statTotal">0</div>
+      <div class="stat-label">คำทั้งหมด</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="statLearned">0</div>
+      <div class="stat-label">รู้แล้ว ✅</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="statRemaining">0</div>
+      <div class="stat-label">เหลืออีก</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="statPercent">0%</div>
+      <div class="stat-label">ความคืบหน้า</div>
+    </div>
+  </div>
+
+  <!-- NO RESULT MESSAGE -->
+  <div class="no-result" id="noResult" style="display:none;">
+    ❌ ไม่พบคำศัพท์ที่ค้นหา
+  </div>
+
+  <script>
+    // ===== Load Data =====
+    let allWords = [];
+    let filteredWords = [];
+    let currentIndex = 0;
+    let learnedSet = new Set(JSON.parse(localStorage.getItem('learnedWords') || '[]'));
+    let currentLevel = 'all';
+    let isFlipped = false;
+
+    fetch('vocab_data.json')
+      .then(r => r.json())
+      .then(data => {
+        allWords = data;
+        applyFilter();
+      });
+
+    // ===== Filter & Search =====
+    function applyFilter() {
+      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+      filteredWords = allWords.filter(w => {
+        const levelOk = currentLevel === 'all' || w.level === currentLevel;
+        const searchOk = !query || w.word.toLowerCase().includes(query) || w.meaning.includes(query);
+        return levelOk && searchOk;
+      });
+
+      document.getElementById('noResult').style.display = filteredWords.length === 0 ? 'block' : 'none';
+      currentIndex = 0;
+      renderCard();
+      updateStats();
+    }
+
+    // ===== Render Card =====
+    function renderCard() {
+      const card = document.getElementById('card');
+      // Remove flip
+      card.classList.remove('flipped');
+      isFlipped = false;
+
+      if (filteredWords.length === 0) {
+        document.getElementById('cardWord').textContent = '—';
+        document.getElementById('cardPos').textContent = '';
+        document.getElementById('cardIpa').textContent = '';
+        document.getElementById('cardLevel').textContent = '';
+        document.getElementById('cardWordBack').textContent = '—';
+        document.getElementById('cardMeaning').textContent = '—';
+        document.getElementById('cardIpaBack').textContent = '';
+        document.getElementById('cardLevelBack').textContent = '';
+        document.getElementById('currentNum').textContent = '0';
+        document.getElementById('totalNum').textContent = '0';
+        document.getElementById('progressBar').style.width = '0%';
+        return;
+      }
+
+      const w = filteredWords[currentIndex];
+      const levelLabel = `<span class="lvl-badge lvl-${w.level.toLowerCase()}">${w.level}</span>`;
+
+      // Front
+      document.getElementById('cardWord').textContent = w.word;
+      document.getElementById('cardPos').textContent = w.pos;
+      document.getElementById('cardIpa').textContent = w.ipa ? `/${w.ipa}/` : '';
+      document.getElementById('cardLevel').innerHTML = levelLabel;
+
+      // Back
+      document.getElementById('cardWordBack').textContent = w.word;
+      document.getElementById('cardMeaning').textContent = w.meaning || '—';
+      document.getElementById('cardIpaBack').textContent = w.ipa ? `/${w.ipa}/` : '';
+      document.getElementById('cardLevelBack').innerHTML = levelLabel;
+
+      // Progress
+      document.getElementById('currentNum').textContent = currentIndex + 1;
+      document.getElementById('totalNum').textContent = filteredWords.length;
+      const pct = ((currentIndex + 1) / filteredWords.length) * 100;
+      document.getElementById('progressBar').style.width = pct + '%';
+
+      // Highlight learned
+      if (learnedSet.has(w.word)) {
+        card.classList.add('learned');
+      } else {
+        card.classList.remove('learned');
+      }
+    }
+
+    // ===== Flip =====
+    function flipCard() {
+      const card = document.getElementById('card');
+      if (filteredWords.length === 0) return;
+      card.classList.toggle('flipped');
+      isFlipped = !isFlipped;
+    }
+
+    document.getElementById('card').addEventListener('click', flipCard);
+
+    // ===== Navigation =====
+    function goNext() {
+      if (filteredWords.length === 0) return;
+      currentIndex = (currentIndex + 1) % filteredWords.length;
+      renderCard();
+    }
+
+    function goPrev() {
+      if (filteredWords.length === 0) return;
+      currentIndex = (currentIndex - 1 + filteredWords.length) % filteredWords.length;
+      renderCard();
+    }
+
+    document.getElementById('nextBtn').addEventListener('click', goNext);
+    document.getElementById('prevBtn').addEventListener('click', goPrev);
+
+    // ===== Know / Don't Know =====
+    function markKnow(e) {
+      e.stopPropagation();
+      if (filteredWords.length === 0) return;
+      const w = filteredWords[currentIndex];
+      learnedSet.add(w.word);
+      saveProgress();
+      updateStats();
+      // Animate then go next
+      document.getElementById('card').classList.add('fly-out');
+      setTimeout(() => {
+        document.getElementById('card').classList.remove('fly-out');
+        goNext();
+      }, 400);
+    }
+
+    function markDontKnow(e) {
+      e.stopPropagation();
+      if (filteredWords.length === 0) return;
+      const w = filteredWords[currentIndex];
+      learnedSet.delete(w.word);
+      saveProgress();
+      updateStats();
+      goNext();
+    }
+
+    document.getElementById('knowBtn').addEventListener('click', markKnow);
+    document.getElementById('dontKnowBtn').addEventListener('click', markDontKnow);
+
+    // ===== Speech =====
+    document.getElementById('speakBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (filteredWords.length === 0) return;
+      const word = filteredWords[currentIndex].word;
+      const utter = new SpeechSynthesisUtterance(word);
+      utter.lang = 'en-US';
+      speechSynthesis.speak(utter);
+    });
+
+    // ===== Shuffle =====
+    document.getElementById('shuffleBtn').addEventListener('click', () => {
+      for (let i = filteredWords.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [filteredWords[i], filteredWords[j]] = [filteredWords[j], filteredWords[i]];
+      }
+      currentIndex = 0;
+      renderCard();
+    });
+
+    // ===== Reset =====
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if (confirm('รีเซ็ตความคืบหน้าทั้งหมด?')) {
+        learnedSet.clear();
+        saveProgress();
+        updateStats();
+        renderCard();
+      }
+    });
+
+    // ===== Level Filter Buttons =====
+    document.querySelectorAll('.level-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentLevel = btn.dataset.level;
+        applyFilter();
+      });
+    });
+
+    // ===== Search =====
+    document.getElementById('searchInput').addEventListener('input', applyFilter);
+
+    // ===== Keyboard =====
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      switch (e.key) {
+        case ' ':
+        case 'Enter':
+          e.preventDefault();
+          flipCard();
+          break;
+        case 'ArrowRight':
+          goNext();
+          break;
+        case 'ArrowLeft':
+          goPrev();
+          break;
+        case 'k':
+        case 'K':
+          if (isFlipped) markKnow(new Event('click'));
+          break;
+        case 's':
+        case 'S':
+          document.getElementById('shuffleBtn').click();
+          break;
+      }
+    });
+
+    // ===== Stats =====
+    function updateStats() {
+      const total = filteredWords.length;
+      const learned = filteredWords.filter(w => learnedSet.has(w.word)).length;
+      const remaining = total - learned;
+      const pct = total > 0 ? Math.round((learned / total) * 100) : 0;
+
+      document.getElementById('learnedNum').textContent = learned;
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statLearned').textContent = learned;
+      document.getElementById('statRemaining').textContent = remaining;
+      document.getElementById('statPercent').textContent = pct + '%';
+    }
+
+    function saveProgress() {
+      localStorage.setItem('learnedWords', JSON.stringify([...learnedSet]));
+    }
+  </script>
+</body>
+</html>
