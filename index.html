@@ -41,6 +41,19 @@
     </div>
   </div>
 
+  <!-- MODE TOGGLE -->
+  <div class="mode-toggle-wrap">
+    <span class="mode-label">โหมด:</span>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="modeEn" data-mode="en">
+        🇬🇧 อังกฤษ → ไทย
+      </button>
+      <button class="mode-btn" id="modeTh" data-mode="th">
+        🇹🇭 ไทย → อังกฤษ
+      </button>
+    </div>
+  </div>
+
   <!-- PROGRESS -->
   <div class="progress-section">
     <div class="progress-info">
@@ -64,7 +77,7 @@
           <div class="card-word" id="cardWord">—</div>
           <div class="card-pos" id="cardPos">—</div>
           <div class="card-ipa" id="cardIpa">—</div>
-          <div class="card-hint">แตะการ์ดเพื่อดูความหมาย 👆</div>
+          <div class="card-hint" id="cardHint">แตะการ์ดเพื่อดูความหมาย 👆</div>
           <button class="speak-btn" id="speakBtn" title="ฟังเสียง">🔊</button>
         </div>
 
@@ -123,6 +136,7 @@
     let learnedSet = new Set(JSON.parse(localStorage.getItem('learnedWords') || '[]'));
     let currentLevel = 'all';
     let isFlipped = false;
+    let currentMode = 'en'; // 'en' = EN→TH,  'th' = TH→EN
 
     fetch('vocab_data.json')
       .then(r => r.json())
@@ -149,7 +163,6 @@
     // ===== Render Card =====
     function renderCard() {
       const card = document.getElementById('card');
-      // Remove flip
       card.classList.remove('flipped');
       isFlipped = false;
 
@@ -170,17 +183,40 @@
 
       const w = filteredWords[currentIndex];
       const levelLabel = `<span class="lvl-badge lvl-${w.level.toLowerCase()}">${w.level}</span>`;
+      const isTHmode = currentMode === 'th';
 
-      // Front
-      document.getElementById('cardWord').textContent = w.word;
-      document.getElementById('cardPos').textContent = w.pos;
-      document.getElementById('cardIpa').textContent = w.ipa ? `/${w.ipa}/` : '';
+      // FRONT face content
+      if (isTHmode) {
+        // TH→EN mode: show Thai meaning on front
+        document.getElementById('cardWord').textContent = w.meaning || '—';
+        document.getElementById('cardPos').textContent = w.pos;
+        document.getElementById('cardIpa').textContent = '';
+        document.getElementById('cardHint').textContent = 'แตะการ์ดเพื่อดูคำศัพท์ภาษาอังกฤษ 👆';
+        card.classList.add('mode-th');
+        card.classList.remove('mode-en');
+      } else {
+        // EN→TH mode: show English word on front
+        document.getElementById('cardWord').textContent = w.word;
+        document.getElementById('cardPos').textContent = w.pos;
+        document.getElementById('cardIpa').textContent = w.ipa ? `/${w.ipa}/` : '';
+        document.getElementById('cardHint').textContent = 'แตะการ์ดเพื่อดูความหมาย 👆';
+        card.classList.add('mode-en');
+        card.classList.remove('mode-th');
+      }
       document.getElementById('cardLevel').innerHTML = levelLabel;
 
-      // Back
-      document.getElementById('cardWordBack').textContent = w.word;
-      document.getElementById('cardMeaning').textContent = w.meaning || '—';
-      document.getElementById('cardIpaBack').textContent = w.ipa ? `/${w.ipa}/` : '';
+      // BACK face content
+      if (isTHmode) {
+        // TH→EN mode: show English word on back
+        document.getElementById('cardWordBack').textContent = w.meaning || '—';
+        document.getElementById('cardMeaning').textContent = w.word;
+        document.getElementById('cardIpaBack').textContent = w.ipa ? `/${w.ipa}/` : '';
+      } else {
+        // EN→TH mode: show Thai meaning on back
+        document.getElementById('cardWordBack').textContent = w.word;
+        document.getElementById('cardMeaning').textContent = w.meaning || '—';
+        document.getElementById('cardIpaBack').textContent = w.ipa ? `/${w.ipa}/` : '';
+      }
       document.getElementById('cardLevelBack').innerHTML = levelLabel;
 
       // Progress
@@ -260,6 +296,17 @@
       const utter = new SpeechSynthesisUtterance(word);
       utter.lang = 'en-US';
       speechSynthesis.speak(utter);
+    });
+
+    // ===== Mode Toggle =====
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        currentIndex = 0;
+        renderCard();
+      });
     });
 
     // ===== Shuffle =====
